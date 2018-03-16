@@ -7,15 +7,13 @@ find_package(OpenCL REQUIRED)
 
 find_package(catkin REQUIRED COMPONENTS
   roscpp
+  roslib
 )
+
+
+include_directories(${catkin_INCLUDE_DIRS})
+include_directories(${OpenCL_INCLUDE_DIRS})
 
 catkin_package()
-
-include_directories(
-# include
-  ${catkin_INCLUDE_DIRS}
-  ${OPENCL_INCLUDE_DIR}
-)
-
-#add_executable(hello_gpu_world src/hello_gpu_world.cpp)
-#target_link_libraries(hello_gpu_world ${catkin_LIBRARIES} ${OPENCL_INCLUDE_DIR})
+add_executable(hello_gpu src/hello_gpu.cpp)
+target_link_libraries(hello_gpu ${OpenCL_LIBRARIES} ${catkin_LIBRARIES})
