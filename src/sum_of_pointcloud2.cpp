@@ -18,6 +18,8 @@ using namespace std;
 
 cl_kernel kernel;
 cl_context context;
+cl_uint deviceIdCount;
+vector<cl_device_id> deviceIds;
 
 string getPlatformName (cl_platform_id id){
     size_t size = 0;
@@ -67,14 +69,17 @@ cl_program createProgram (const string& source, cl_context context){
 }
 
 void cloudCallback (const sensor_msgs::PointCloud2& msg){
-    // clSetKernelArg (kernel, 0, sizeof (cl_mem), &inputImage);// http://www.khronos.org/registry/cl/sdk/1.1/docs/man/xhtml/clCreateCommandQueue.html
-    // cl_command_queue queue = clCreateCommandQueue (context, deviceIds [0], 0, &error);
-    // checkError (error);
+    clSetKernelArg (kernel, 0, sizeof (cl_mem), &msg.data);
+
+    cl_int error = 0;
+    cl_command_queue queue = clCreateCommandQueueWithProperties (context, deviceIds [0], NULL, &error);
+    checkError (error);
+    
     // Run the processing
     // http://www.khronos.org/registry/cl/sdk/1.1/docs/man/xhtml/clEnqueueNDRangeKernel.html
-    // size_t offset [3] = { 0 };
-    // size_t size [3] = { image.width, image.height, 1 };
-    // checkError (clEnqueueNDRangeKernel (queue, kernel, 2, offset, size, NULL, 0, NULL, NULL));
+    size_t offset [3] = { 0 };
+    size_t size [3] = { 0 };
+    checkError (clEnqueueNDRangeKernel (queue, kernel, 2, offset, size, NULL, 0, NULL, NULL));
     
     // Prepare the result image, set to black
     // Image result = image;
@@ -85,7 +90,7 @@ void cloudCallback (const sensor_msgs::PointCloud2& msg){
     // size_t region [3] = { result.width, result.height, 1 };
     // clEnqueueReadImage (queue, outputImage, CL_TRUE, origin, region, 0, 0, result.pixel.data (), 0, NULL, NULL);
 
-    // clReleaseCommandQueue (queue);
+    clReleaseCommandQueue (queue);
 }
 
 int main (int argc, char** argv){
@@ -116,7 +121,7 @@ int main (int argc, char** argv){
     }
 
     // http://www.khronos.org/registry/cl/sdk/1.1/docs/man/xhtml/clGetDeviceIDs.html
-    cl_uint deviceIdCount = 0;
+    deviceIdCount = 0;
     clGetDeviceIDs (platformIds [0], CL_DEVICE_TYPE_ALL, 0, NULL, &deviceIdCount);
 
     if (deviceIdCount == 0) {
@@ -127,7 +132,7 @@ int main (int argc, char** argv){
         ROS_INFO("Found %d device(s)", deviceIdCount);
     }
 
-    vector<cl_device_id> deviceIds (deviceIdCount);
+    deviceIds  = vector<cl_device_id>(deviceIdCount);
     clGetDeviceIDs (platformIds [0], CL_DEVICE_TYPE_ALL, deviceIdCount, deviceIds.data(), NULL);
 
     for (cl_uint i = 0; i < deviceIdCount; ++i) {
@@ -148,9 +153,13 @@ int main (int argc, char** argv){
 
     checkError (clBuildProgram (program, deviceIdCount, deviceIds.data (), "-D FILTER_SIZE=1", NULL, NULL));
 
+    ROS_INFO("Program built");
+
     // http://www.khronos.org/registry/cl/sdk/1.1/docs/man/xhtml/clCreateKernel.html
-    kernel = clCreateKernel (program, "Sum", &error);
+    kernel = clCreateKernel (program, "sumPointCloud", &error);
     checkError (error);
+
+    ROS_INFO("Kernel created");
 
     while(ros::ok()){
         ros::spin();
