@@ -93,7 +93,7 @@ void cloudCallback (const sensor_msgs::PointCloud2& msg){
     // http://www.khronos.org/registry/cl/sdk/1.1/docs/man/xhtml/clEnqueueNDRangeKernel.html
     // size_t offset [msg_.data.size()] = { 0 };
     size_t size[1] = {msg_.data.size()};
-    // TODO I need a wait command here (?)
+
     cl_event gpuExec;
 
     checkError (clEnqueueNDRangeKernel (queue, kernel, 1, NULL, size, NULL, 0, NULL, &gpuExec));
