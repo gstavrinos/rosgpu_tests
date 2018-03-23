@@ -48,7 +48,7 @@ string getDeviceName (cl_device_id id){
 void checkError (cl_int error){
     if (error != CL_SUCCESS) {
         ROS_ERROR("OpenCL call failed with error: %d", error);
-        exit (1);
+        //exit (1);
     }
 }
 
@@ -71,44 +71,70 @@ cl_program createProgram (const string& source, cl_context context){
 }
 
 void cloudCallback (const sensor_msgs::PointCloud2& msg){
-    sensor_msgs::PointCloud2 msg_ = sensor_msgs::PointCloud2(msg);
+    cl_int sz = msg.data.size();
+    float *in = (float *) malloc(sizeof(float)*sz);
     cl_int error = 0;
 
-    cl_mem input_buffer = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(cl_float) * msg_.data.size(), NULL, &error);
+    ROS_WARN("start");
+
+    cl_mem input_buffer = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(float) * sz, NULL, &error);
     checkError(error);
+
+    ROS_WARN("test0");
 
     cl_mem result_buffer = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(cl_float), NULL, &error);
     checkError(error);
 
+    ROS_WARN("test1");
 
-    cl_int sz = msg_.data.size();
     clSetKernelArg (kernel, 0, sizeof (cl_mem), &input_buffer);
     clSetKernelArg (kernel, 1, sizeof (cl_int), &sz);
     clSetKernelArg (kernel, 2, sizeof (cl_mem), &result_buffer);
 
+    ROS_WARN("test1.33");
+
     cl_command_queue queue = clCreateCommandQueueWithProperties (context, deviceIds [0], NULL, &error);
+
+    ROS_WARN("test1.66");
+
+    clEnqueueWriteBuffer(queue, input_buffer, CL_TRUE, 0, sizeof(float) * sz, in, 0, NULL, NULL);
+
     checkError (error);
-    
+
+    ROS_WARN("test2");
+
     // Run the processing
     // http://www.khronos.org/registry/cl/sdk/1.1/docs/man/xhtml/clEnqueueNDRangeKernel.html
     // size_t offset [msg_.data.size()] = { 0 };
-    size_t size[1] = {msg_.data.size()};
+    size_t size[1] = {sz};
 
     cl_event gpuExec;
 
     checkError (clEnqueueNDRangeKernel (queue, kernel, 1, NULL, size, NULL, 0, NULL, &gpuExec));
 
+    ROS_WARN("test3");
+
     clWaitForEvents(1, &gpuExec);
 
-    cl_float result;
-    checkError(clEnqueueReadBuffer(queue, result_buffer, CL_TRUE, 0, sizeof(cl_float), &result, 0, NULL, NULL));
+    ROS_WARN("test4");
+
+    cl_float *result = (cl_float *) malloc(sizeof(cl_float));
+    checkError(clEnqueueReadBuffer(queue, result_buffer, CL_TRUE, 0, sizeof(cl_float), result, 0, NULL, NULL));
+
+    ROS_WARN("test5");
 
     cout << result << endl;
     // ROS_WARN("%f", result);
     clReleaseCommandQueue (queue);
-    std_msgs::Float32 pmsg;
-    pmsg.data = result;
-    pub.publish(pmsg);
+
+    ROS_WARN("test6");
+
+    // Interesting code in this question (the question is irrelevant)
+    // https://stackoverflow.com/questions/15466923/segmentation-faultcore-dumped-in-opencl
+
+    // std_msgs::Float32 pmsg;
+    // pmsg.data = result;
+    // pub.publish(pmsg);
 }
 
 int main (int argc, char** argv){
