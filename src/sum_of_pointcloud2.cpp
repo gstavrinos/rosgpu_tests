@@ -106,11 +106,11 @@ void cloudCallback (const sensor_msgs::PointCloud2& msg){
     // Run the processing
     // http://www.khronos.org/registry/cl/sdk/1.1/docs/man/xhtml/clEnqueueNDRangeKernel.html
     // size_t offset [msg_.data.size()] = { 0 };
-    size_t size[1] = {sz};
+    size_t size = sz;
 
     cl_event gpuExec;
 
-    checkError (clEnqueueNDRangeKernel (queue, kernel, 1, NULL, size, NULL, 0, NULL, &gpuExec));
+    checkError (clEnqueueNDRangeKernel (queue, kernel, 1, NULL, &size, NULL, 0, NULL, &gpuExec));
 
     ROS_WARN("test3");
 
@@ -123,18 +123,20 @@ void cloudCallback (const sensor_msgs::PointCloud2& msg){
 
     ROS_WARN("test5");
 
-    cout << result << endl;
+    cout << *result << endl;
     // ROS_WARN("%f", result);
     clReleaseCommandQueue (queue);
+    clReleaseMemObject(input_buffer);
+    clReleaseMemObject(result_buffer);
 
     ROS_WARN("test6");
 
     // Interesting code in this question (the question is irrelevant)
     // https://stackoverflow.com/questions/15466923/segmentation-faultcore-dumped-in-opencl
 
-    // std_msgs::Float32 pmsg;
-    // pmsg.data = result;
-    // pub.publish(pmsg);
+    std_msgs::Float32 pmsg;
+    pmsg.data = *result;
+    pub.publish(pmsg);
 }
 
 int main (int argc, char** argv){
