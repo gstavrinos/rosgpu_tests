@@ -1,13 +1,10 @@
-#include <ros/ros.h>
-#include <ros/package.h>
-#include <sensor_msgs/PointCloud2.h>
-#include <std_msgs/Float32.h>
-
-#include <iostream>
 #include <vector>
 #include <string>
 #include <fstream>
-#include <sstream>
+#include <iterator>
+#include <ros/ros.h>
+#include <ros/package.h>
+#include <sensor_msgs/PointCloud2.h>
 
 #ifdef __APPLE__
     #include "OpenCL/opencl.h"
@@ -48,7 +45,7 @@ string getDeviceName (cl_device_id id){
 void checkError (cl_int error){
     if (error != CL_SUCCESS) {
         ROS_ERROR("OpenCL call failed with error: %d", error);
-        //exit (1);
+        exit (1);
     }
 }
 
@@ -59,7 +56,6 @@ string LoadKernel (const char* name){
 }
 
 cl_program createProgram (const string& source, cl_context context){
-    // http://www.khronos.org/registry/cl/sdk/1.1/docs/man/xhtml/clCreateProgramWithSource.html
     size_t lengths [1] = { source.size () };
     const char* sources [1] = { source.data () };
 
@@ -72,71 +68,37 @@ cl_program createProgram (const string& source, cl_context context){
 
 void cloudCallback (const sensor_msgs::PointCloud2& msg){
     cl_int sz = msg.data.size();
-    float *in = (float *) malloc(sizeof(float)*sz);
+    cl_uint8 *in = (cl_uint8 *) malloc(sizeof(cl_uint8)*sz);
     cl_int error = 0;
 
-    ROS_WARN("start");
-
-    cl_mem input_buffer = clCreateBuffer(context, CL_MEM_READ_ONLY, sizeof(float) * sz, NULL, &error);
+    cl_mem buffer = clCreateBuffer(context, CL_MEM_READ_WRITE, sizeof(cl_uint8) * sz, NULL, &error);
     checkError(error);
 
-    ROS_WARN("test0");
-
-    cl_mem result_buffer = clCreateBuffer(context, CL_MEM_WRITE_ONLY, sizeof(cl_float), NULL, &error);
-    checkError(error);
-
-    ROS_WARN("test1");
-
-    clSetKernelArg (kernel, 0, sizeof (cl_mem), &input_buffer);
-    clSetKernelArg (kernel, 1, sizeof (cl_int), &sz);
-    clSetKernelArg (kernel, 2, sizeof (cl_mem), &result_buffer);
-
-    ROS_WARN("test1.33");
+    clSetKernelArg (kernel, 0, sizeof (cl_mem), &buffer);
 
     cl_command_queue queue = clCreateCommandQueueWithProperties (context, deviceIds [0], NULL, &error);
 
-    ROS_WARN("test1.66");
-
-    clEnqueueWriteBuffer(queue, input_buffer, CL_TRUE, 0, sizeof(float) * sz, in, 0, NULL, NULL);
-
+    clEnqueueWriteBuffer(queue, buffer, CL_TRUE, 0, sizeof(cl_uint8) * sz, in, 0, NULL, NULL);
     checkError (error);
 
-    ROS_WARN("test2");
-
-    // Run the processing
-    // http://www.khronos.org/registry/cl/sdk/1.1/docs/man/xhtml/clEnqueueNDRangeKernel.html
-    // size_t offset [msg_.data.size()] = { 0 };
     size_t size = sz;
 
     cl_event gpuExec;
 
     checkError (clEnqueueNDRangeKernel (queue, kernel, 1, NULL, &size, NULL, 0, NULL, &gpuExec));
 
-    ROS_WARN("test3");
-
     clWaitForEvents(1, &gpuExec);
 
-    ROS_WARN("test4");
+    uint8_t *result = (uint8_t *) malloc(sizeof(uint8_t) * sz);
+    checkError(clEnqueueReadBuffer(queue, buffer, CL_TRUE, 0, sizeof(uint8_t) * sz, result, 0, NULL, NULL));
 
-    cl_float *result = (cl_float *) malloc(sizeof(cl_float));
-    checkError(clEnqueueReadBuffer(queue, result_buffer, CL_TRUE, 0, sizeof(cl_float), result, 0, NULL, NULL));
-
-    ROS_WARN("test5");
-
-    cout << *result << endl;
-    // ROS_WARN("%f", result);
     clReleaseCommandQueue (queue);
-    clReleaseMemObject(input_buffer);
-    clReleaseMemObject(result_buffer);
+    clReleaseMemObject(buffer);
 
-    ROS_WARN("test6");
-
-    // Interesting code in this question (the question is irrelevant)
-    // https://stackoverflow.com/questions/15466923/segmentation-faultcore-dumped-in-opencl
-
-    std_msgs::Float32 pmsg;
-    pmsg.data = *result;
-    pub.publish(pmsg);
+    sensor_msgs::PointCloud2 res = sensor_msgs::PointCloud2(msg);
+    res.data.insert(res.data.end(), &result[0], &result[sz]);
+    pub.publish(res);
+    free(result);
 }
 
 int main (int argc, char** argv){
@@ -170,7 +132,6 @@ int main (int argc, char** argv){
         ROS_INFO("\t (%d) : %s", i+1, getPlatformName (platformIds [i]).c_str());
     }
 
-    // http://www.khronos.org/registry/cl/sdk/1.1/docs/man/xhtml/clGetDeviceIDs.html
     deviceIdCount = 0;
     clGetDeviceIDs (platformIds [0], CL_DEVICE_TYPE_ALL, 0, NULL, &deviceIdCount);
 
@@ -189,7 +150,6 @@ int main (int argc, char** argv){
         ROS_INFO("\t (%d) : %s", i+1, getDeviceName (deviceIds [i]).c_str());
     }
 
-    // http://www.khronos.org/registry/cl/sdk/1.1/docs/man/xhtml/clCreateContext.html
     const cl_context_properties contextProperties [] = {CL_CONTEXT_PLATFORM, reinterpret_cast<cl_context_properties> (platformIds [0]), 0, 0};
 
     cl_int error = CL_SUCCESS;
@@ -198,20 +158,18 @@ int main (int argc, char** argv){
 
     ROS_INFO("Context created");
 
-    // Create a program from source
     cl_program program = createProgram (LoadKernel (full_kernel_path.c_str()), context);
 
     checkError (clBuildProgram (program, deviceIdCount, deviceIds.data (), "-D FILTER_SIZE=1", NULL, NULL));
 
     ROS_INFO("Program built");
 
-    // http://www.khronos.org/registry/cl/sdk/1.1/docs/man/xhtml/clCreateKernel.html
     kernel = clCreateKernel (program, "sumPointCloud", &error);
     checkError (error);
 
     ROS_INFO("Kernel created");
 
-    pub = nh.advertise<std_msgs::Float32>(result_topic, 1);
+    pub = nh.advertise<sensor_msgs::PointCloud2>(result_topic, 1);
     ros::Subscriber s = nh.subscribe (cloud_topic, 1, cloudCallback);
 
     while(ros::ok()){

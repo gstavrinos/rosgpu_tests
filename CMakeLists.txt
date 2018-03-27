@@ -10,7 +10,6 @@ find_package(catkin REQUIRED COMPONENTS
   roslib
 )
 
-
 include_directories(${catkin_INCLUDE_DIRS})
 include_directories(${OpenCL_INCLUDE_DIRS})
 
@@ -21,3 +20,5 @@ add_executable(sum_of_pointcloud2 src/sum_of_pointcloud2.cpp)
 target_link_libraries(sum_of_pointcloud2 ${OpenCL_LIBRARIES} ${catkin_LIBRARIES})
 add_executable(sum_of_pointcloud2_cpu src/sum_of_pointcloud2_cpu.cpp)
 target_link_libraries(sum_of_pointcloud2_cpu ${catkin_LIBRARIES})
+add_executable(sum_of_pointcloud2_comparison src/sum_of_pointcloud2_comparison.cpp)
+target_link_libraries(sum_of_pointcloud2_comparison ${catkin_LIBRARIES})
